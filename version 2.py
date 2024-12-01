@@ -1,6 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
-import json
+from tkinter import ttk, filedialog, messagebox
 from bs4 import BeautifulSoup
 
 # Attribute mapping dictionary
@@ -54,122 +53,104 @@ attribute_mapping = {
     'Acc': 'Acceleration'
 }
 
-def parse_player_attributes(html_content):
+def parse_html_file(file_path):
+    """
+    Parse the uploaded HTML file and extract player data.
+    """
+    with open(file_path, 'r', encoding='utf-8') as file:
+        html_content = file.read()
+
     soup = BeautifulSoup(html_content, 'html.parser')
-    attributes = {}
-    
-    # Find all attribute elements
+    player_data = {}
+
+    # Extract attribute data
     for abbr, full_name in attribute_mapping.items():
-        # Find the element containing the attribute
-        attr_element = soup.find(text=abbr)
-        if attr_element:
-            # Get the value associated with the attribute
-            value = attr_element.find_next('td').text.strip()
-            attributes[full_name] = value
-    
-    return attributes
+        cell = soup.find('th', text=abbr)
+        if cell:
+            # Find the corresponding value cell
+            value = cell.find_next('td').text.strip()
+            player_data[full_name] = value
 
-def get_player_role_data(html_content):
-    soup = BeautifulSoup(html_content, 'html.parser')
-    
-    # Get player role from dropdown or header
-    role = soup.find('select', {'class': 'role-selector'}).find('option', selected=True).text
-    
-    # Get attribute values and their colors
-    attributes = {}
-    for attr_row in soup.find_all('tr', {'class': 'attribute-row'}):
-        abbr = attr_row.find('td', {'class': 'attribute-name'}).text.strip()
-        value = attr_row.find('td', {'class': 'attribute-value'}).text.strip()
-        color = attr_row.find('td', {'class': 'attribute-color'})['class'][-1]
-        
-        if abbr in attribute_mapping:
-            full_name = attribute_mapping[abbr]
-            color_value = 1  # default
-            if 'blue' in color:
-                color_value = 3
-            elif 'green' in color:
-                color_value = 5
-                
-            attributes[full_name] = {
-                'value': value,
-                'importance': color_value
-            }
-    
-    return {
-        'Role': role,
-        'Attributes': attributes
-    }
+    return player_data
 
-def calculate_attribute_scores(player_data, role_data):
-    score_min = 0
-    score_max = 0
-    
-    # Function to parse attribute ranges
-    def parse_range(value):
-        if isinstance(value, str) and '-' in value:
-            min_val, max_val = value.split('-')
-            return int(min_val), int(max_val)
-        elif isinstance(value, (int, float)):
-            return value, value
-        return 0, 0
+def calculate_min_max(value):
+    """
+    Parse a value range (e.g., "10-15") into min and max values.
+    """
+    if '-' in value:
+        min_val, max_val = map(int, value.split('-'))
+    elif value.isdigit():
+        min_val = max_val = int(value)
+    else:
+        min_val = max_val = 0
+    return min_val, max_val
 
-    # Compare each attribute
-    for category in ['Technical', 'Mental', 'Physical']:
-        for attr, role_value in role_data[category].items():
-            # Find matching player attribute
-            player_value = player_data.get(attr, 0)
-            
-            # Get min and max values from role requirements
-            min_req, max_req = parse_range(role_value)
-            
-            # Add to total scores
-            score_min += min_req
-            score_max += max_req
-
+def calculate_scores(player_data, role_attributes):
+    """
+    Calculate minimum and maximum scores for a role.
+    """
+    score_min, score_max = 0, 0
+    for attribute, role_value in role_attributes.items():
+        player_value = player_data.get(attribute, '0')
+        role_min, role_max = calculate_min_max(str(role_value))
+        player_min, player_max = calculate_min_max(player_value)
+        score_min += max(player_min, role_min)
+        score_max += min(player_max, role_max)
     return score_min, score_max
 
 def create_interface():
-    root = tk.Tk()
-    root.title("Role Analyzer")
-
-    # Create dropdown for roles
-    roles = list(get_all_role_data().keys())
-    role_var = tk.StringVar()
-    role_dropdown = ttk.Combobox(root, textvariable=role_var, values=roles)
-    role_dropdown.pack(pady=10)
-
-    # Create result labels
-    result_min_label = tk.Label(root, text="Minimum Score: ")
-    result_min_label.pack()
-    result_max_label = tk.Label(root, text="Maximum Score: ")
-    result_max_label.pack()
+    """
+    Create the GUI interface using Tkinter.
+    """
+    def load_file():
+        file_path = filedialog.askopenfilename(filetypes=[("HTML files", "*.html")])
+        if not file_path:
+            return
+        try:
+            global player_data
+            player_data = parse_html_file(file_path)
+            messagebox.showinfo("Success", "File loaded successfully!")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load file: {e}")
 
     def analyze_role():
         selected_role = role_var.get()
-        role_data = get_all_role_data()[selected_role]
-        
-        # Load player data from HTML file
-        player_data = load_player_data('player_stats.html')  # You'll need to implement this
-        
-        min_score, max_score = calculate_attribute_scores(player_data, role_data)
-        
+        if not selected_role or selected_role not in roles_data:
+            messagebox.showwarning("Warning", "Please select a valid role.")
+            return
+
+        role_data = roles_data[selected_role]
+        min_score, max_score = calculate_scores(player_data, role_data['Attributes'])
         result_min_label.config(text=f"Minimum Score: {min_score}")
         result_max_label.config(text=f"Maximum Score: {max_score}")
 
-    # Create analyze button
-    analyze_button = ttk.Button(root, text="Analyze", command=analyze_role)
+    root = tk.Tk()
+    root.title("Role Analyzer")
+
+    # Load button
+    load_button = ttk.Button(root, text="Load Player Data", command=load_file)
+    load_button.pack(pady=10)
+
+    # Dropdown for roles
+    roles_data = get_all_role_data()
+    role_var = tk.StringVar()
+    role_dropdown = ttk.Combobox(root, textvariable=role_var, values=list(roles_data.keys()))
+    role_dropdown.pack(pady=10)
+
+    # Labels for results
+    result_min_label = tk.Label(root, text="Minimum Score: N/A")
+    result_min_label.pack()
+    result_max_label = tk.Label(root, text="Maximum Score: N/A")
+    result_max_label.pack()
+
+    # Analyze button
+    analyze_button = ttk.Button(root, text="Analyze Role", command=analyze_role)
     analyze_button.pack(pady=10)
 
     root.mainloop()
 
-def load_player_data(html_file):
-    # This function would parse the HTML file and extract player attributes
-    # You'll need to implement the HTML parsing logic here
-    # Return a dictionary of player attributes
-    pass
-
 def get_all_role_data():
-    roles_data = {
+    return {
         #keepers
         'Goalkeeper': {
         'Role': 'Goalkeeper (Defend)',
@@ -1119,5 +1100,7 @@ def get_all_role_data():
             }
         }
     }
-    
-    return roles_data
+
+# Start the GUI application
+if __name__ == "__main__":
+    create_interface()
