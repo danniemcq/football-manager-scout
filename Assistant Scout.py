@@ -1,3 +1,74 @@
+import tkinter as tk
+from tkinter import ttk
+import json
+
+def calculate_attribute_scores(player_data, role_data):
+    score_min = 0
+    score_max = 0
+    
+    # Function to parse attribute ranges
+    def parse_range(value):
+        if isinstance(value, str) and '-' in value:
+            min_val, max_val = value.split('-')
+            return int(min_val), int(max_val)
+        elif isinstance(value, (int, float)):
+            return value, value
+        return 0, 0
+
+    # Compare each attribute
+    for category in ['Technical', 'Mental', 'Physical']:
+        for attr, role_value in role_data[category].items():
+            # Find matching player attribute
+            player_value = player_data.get(attr, 0)
+            
+            # Get min and max values from role requirements
+            min_req, max_req = parse_range(role_value)
+            
+            # Add to total scores
+            score_min += min_req
+            score_max += max_req
+
+    return score_min, score_max
+
+def create_interface():
+    root = tk.Tk()
+    root.title("Role Analyzer")
+
+    # Create dropdown for roles
+    roles = list(get_all_role_data().keys())
+    role_var = tk.StringVar()
+    role_dropdown = ttk.Combobox(root, textvariable=role_var, values=roles)
+    role_dropdown.pack(pady=10)
+
+    # Create result labels
+    result_min_label = tk.Label(root, text="Minimum Score: ")
+    result_min_label.pack()
+    result_max_label = tk.Label(root, text="Maximum Score: ")
+    result_max_label.pack()
+
+    def analyze_role():
+        selected_role = role_var.get()
+        role_data = get_all_role_data()[selected_role]
+        
+        # Load player data from HTML file
+        player_data = load_player_data('player_stats.html')  # You'll need to implement this
+        
+        min_score, max_score = calculate_attribute_scores(player_data, role_data)
+        
+        result_min_label.config(text=f"Minimum Score: {min_score}")
+        result_max_label.config(text=f"Maximum Score: {max_score}")
+
+    # Create analyze button
+    analyze_button = ttk.Button(root, text="Analyze", command=analyze_role)
+    analyze_button.pack(pady=10)
+
+    root.mainloop()
+
+def load_player_data(html_file):
+    # This function would parse the HTML file and extract player attributes
+    # You'll need to implement the HTML parsing logic here
+    # Return a dictionary of player attributes
+    pass
 
 def get_all_role_data():
     roles_data = {
